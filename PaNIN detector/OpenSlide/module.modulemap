@@ -1,0 +1,5 @@
+module COpenSlide {
+    umbrella header "COpenSlideShim.h"
+    link "openslide"
+    export *
+}
