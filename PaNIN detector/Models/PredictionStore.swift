@@ -27,8 +27,37 @@ final class PredictionStore: @unchecked Sendable {
     var passes: [PredictionPassInfo] = []
 
     var isVisible: Bool = true
+    /// Class labels the user has hidden from the heatmap. A label absent from
+    /// this set is drawn; membership hides it. Empty = every class shown.
+    var hiddenClasses: Set<String> = []
     /// Patches with max probability below this aren't drawn.
     var minProbability: Float = 0.0
+
+    /// Whether a predicted class is currently drawn on the canvas.
+    func isClassVisible(_ label: String) -> Bool {
+        !hiddenClasses.contains(label)
+    }
+
+    func setClassVisible(_ label: String, _ visible: Bool) {
+        if visible {
+            hiddenClasses.remove(label)
+        } else {
+            hiddenClasses.insert(label)
+        }
+    }
+
+    /// The set of distinct predicted class labels, sorted.
+    var predictedLabels: [String] {
+        Set(predictions.map(\.predictedLabel)).sorted()
+    }
+
+    func showAllClasses() {
+        hiddenClasses.removeAll()
+    }
+
+    func hideAllClasses() {
+        hiddenClasses = Set(predictions.map(\.predictedLabel))
+    }
 
     var isPredicting: Bool = false
     var progressCurrent: Int = 0
@@ -43,6 +72,7 @@ final class PredictionStore: @unchecked Sendable {
         sourceAnnotationID = nil
         sourceAnnotationClass = nil
         perClassCount = [:]
+        hiddenClasses = []
         passes = []
         isPredicting = false
         progressCurrent = 0

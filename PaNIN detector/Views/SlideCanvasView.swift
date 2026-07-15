@@ -29,6 +29,8 @@ struct SlideCanvasView: NSViewRepresentable {
         _ = store.selectedID
         _ = predictionStore.predictions.count
         _ = predictionStore.isVisible
+        _ = predictionStore.hiddenClasses
+        _ = predictionStore.minProbability
         _ = renderSettings.strokeThickness
         _ = renderSettings.strokeColor
         nsView.slideDocument.overlay.needsDisplay = true

@@ -142,8 +142,31 @@ struct MLModelPanel: View {
                         .font(.caption2)
                         .foregroundStyle(.tertiary)
                 }
+                HStack(spacing: 6) {
+                    Text("Show on slide")
+                        .font(.caption2.bold())
+                        .foregroundStyle(.secondary)
+                    Spacer()
+                    Button("All") { predictionStore.showAllClasses() }
+                        .buttonStyle(.plain)
+                        .font(.caption2)
+                        .foregroundStyle(.tint)
+                        .disabled(predictionStore.hiddenClasses.isEmpty)
+                    Text("·").font(.caption2).foregroundStyle(.tertiary)
+                    Button("None") { predictionStore.hideAllClasses() }
+                        .buttonStyle(.plain)
+                        .font(.caption2)
+                        .foregroundStyle(.tint)
+                        .disabled(allClassesHidden)
+                }
+                .padding(.top, 2)
                 ForEach(filteredPerClass, id: \.key) { entry in
                     HStack(spacing: 6) {
+                        Toggle("", isOn: classVisibleBinding(for: entry.key))
+                            .toggleStyle(.checkbox)
+                            .labelsHidden()
+                            .controlSize(.mini)
+                            .help("Show “\(entry.key)” on the slide")
                         ColorPicker(
                             "",
                             selection: classColorBinding(for: entry.key),
@@ -154,6 +177,7 @@ struct MLModelPanel: View {
                         .frame(width: 18, height: 18)
                         Text(entry.key)
                             .font(.caption2)
+                            .foregroundStyle(predictionStore.isClassVisible(entry.key) ? .primary : .secondary)
                         Spacer()
                         Text(entry.value.label)
                             .font(.caption2.monospacedDigit())
@@ -190,6 +214,19 @@ struct MLModelPanel: View {
             let classList = p.classes.joined(separator: ", ")
             return "patch \(p.patchSizeLevel)px · stride \(p.strideLevel)px · L\(p.level) ×\(ds) — \(classList)"
         }
+    }
+
+    /// True when every predicted class is currently hidden.
+    private var allClassesHidden: Bool {
+        let labels = Set(predictionStore.predictions.map(\.predictedLabel))
+        return !labels.isEmpty && labels.isSubset(of: predictionStore.hiddenClasses)
+    }
+
+    private func classVisibleBinding(for label: String) -> Binding<Bool> {
+        Binding(
+            get: { predictionStore.isClassVisible(label) },
+            set: { predictionStore.setClassVisible(label, $0) }
+        )
     }
 
     private func classColorBinding(for label: String) -> Binding<Color> {

@@ -438,6 +438,7 @@ final class AnnotationOverlayView: NSView {
         ctx.saveGState()
         for pred in ps.predictions {
             guard pred.maxProbability >= minProb else { continue }
+            guard ps.isClassVisible(pred.predictedLabel) else { continue }
             let color = ps.classColors[pred.predictedLabel] ?? .defaultColor
             let size = CGFloat(pred.sizeLevel0)
             let x = CGFloat(pred.dataX)
