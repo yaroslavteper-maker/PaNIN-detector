@@ -28,6 +28,7 @@ extension Notification.Name {
     static let importAnnotationsRequested      = Notification.Name("PaNINDetector.importAnnotations")
     static let exportGeoJSONRequested          = Notification.Name("PaNINDetector.exportGeoJSON")
     static let showHelpRequested               = Notification.Name("PaNINDetector.showHelp")
+    static let savePredictionsAsAnnotationsRequested = Notification.Name("PaNINDetector.savePredictionsAsAnnotations")
 }
 
 private struct PendingPolygon: Identifiable {
@@ -119,6 +120,9 @@ struct ContentView: View {
     @State private var pendingTSNE: TSNERequest?
     @State private var tsneTask: Task<Void, Never>?
     @State private var showingNewBankConfirmation = false
+    /// Predicted regions staged for conversion into persistent annotations,
+    /// awaiting the user's confirmation (the count can be large).
+    @State private var pendingPredictionAnnotations: [Annotation]?
     @State private var errorMessage: String?
     @State private var slideURL: URL?
     /// User-selected extractor identity for the next patch extraction. `nil`
@@ -347,6 +351,11 @@ struct ContentView: View {
                 openWindow(id: "help")
             }
         }
+        .task {
+            for await _ in NotificationCenter.default.notifications(named: .savePredictionsAsAnnotationsRequested) {
+                requestSavePredictionsAsAnnotations()
+            }
+        }
         .sheet(item: $pendingPredict) { req in
             if let slide, let classifier = classifierStore.classifier {
                 PredictAnnotationSheet(
@@ -396,6 +405,20 @@ struct ContentView: View {
             Button("Cancel", role: .cancel) {}
         } message: {
             Text("Starting a new bank clears the \(bankStore.totalPatches) patches in the current working bank. Annotations and saved bank files on disk are not affected.")
+        }
+        .confirmationDialog(
+            "Save predicted regions as annotations?",
+            isPresented: savePredictionsPromptBinding,
+            titleVisibility: .visible,
+            presenting: pendingPredictionAnnotations
+        ) { anns in
+            Button("Add \(anns.count) annotation\(anns.count == 1 ? "" : "s")") {
+                store.addBatch(anns)
+                pendingPredictionAnnotations = nil
+            }
+            Button("Cancel", role: .cancel) { pendingPredictionAnnotations = nil }
+        } message: { anns in
+            Text("Each displayed prediction becomes a square annotation labeled with its predicted class, saved to this slide's annotation file. This adds \(anns.count) object\(anns.count == 1 ? "" : "s").")
         }
         .alert("Bank import",
                isPresented: bankImportPromptBinding,
@@ -566,6 +589,11 @@ struct ContentView: View {
     private var bankImportPromptBinding: Binding<Bool> {
         Binding(get: { pendingBankImport != nil },
                 set: { if !$0 { pendingBankImport = nil } })
+    }
+
+    private var savePredictionsPromptBinding: Binding<Bool> {
+        Binding(get: { pendingPredictionAnnotations != nil },
+                set: { if !$0 { pendingPredictionAnnotations = nil } })
     }
 
     private var annotationImportPromptBinding: Binding<Bool> {
@@ -811,6 +839,50 @@ struct ContentView: View {
             return
         }
         pendingPredict = PredictRequest(annotation: ann)
+    }
+
+    /// Convert the currently-displayed predictions into persistent annotations
+    /// in the slide's GeoJSON sidecar. Each patch becomes a square polygon
+    /// labeled with its predicted class, positioned exactly where the heatmap
+    /// block is drawn (same Y-mirror as the overlay). Only predictions passing
+    /// the confidence threshold and class-visibility toggles are included — i.e.
+    /// what's currently on screen. Presents a confirmation before committing.
+    private func requestSavePredictionsAsAnnotations() {
+        guard let slide else {
+            errorMessage = "Open a slide first."
+            return
+        }
+        let preds = predictionStore.predictions
+        guard !preds.isEmpty else {
+            errorMessage = "Run a classification on an annotation first."
+            return
+        }
+        let slideH = slide.dimensions.height
+        let minProb = predictionStore.minProbability
+        let newAnns: [Annotation] = preds.compactMap { pred in
+            guard pred.maxProbability >= minProb else { return nil }
+            guard predictionStore.isClassVisible(pred.predictedLabel) else { return nil }
+            let size = CGFloat(pred.sizeLevel0)
+            let x = CGFloat(pred.dataX)
+            // Mirror Y into overlay space so the square lands on the same pixels
+            // the heatmap paints (matches drawPredictions in the overlay).
+            let y = slideH - CGFloat(pred.dataY) - size
+            let pts = [
+                CGPoint(x: x, y: y),
+                CGPoint(x: x + size, y: y),
+                CGPoint(x: x + size, y: y + size),
+                CGPoint(x: x, y: y + size)
+            ]
+            let color = predictionStore.classColors[pred.predictedLabel] ?? .defaultColor
+            return Annotation(points: pts,
+                              classification: pred.predictedLabel,
+                              color: color)
+        }
+        guard !newAnns.isEmpty else {
+            errorMessage = "No visible predictions to save. Check the confidence slider and the per-class toggles."
+            return
+        }
+        pendingPredictionAnnotations = newAnns
     }
 
     /// Pull features from the bank, run t-SNE off the main thread, store the

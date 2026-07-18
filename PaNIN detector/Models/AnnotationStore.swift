@@ -59,6 +59,15 @@ final class AnnotationStore {
         save()
     }
 
+    /// Append many annotations at once, saving the sidecar a single time.
+    /// Used when materializing predicted regions into persistent annotations.
+    func addBatch(_ incoming: [Annotation]) {
+        guard !incoming.isEmpty else { return }
+        annotations.append(contentsOf: incoming)
+        print("[store] added batch of \(incoming.count), total=\(annotations.count)")
+        save()
+    }
+
     func update(_ ann: Annotation) {
         guard let i = annotations.firstIndex(where: { $0.id == ann.id }) else { return }
         annotations[i] = ann

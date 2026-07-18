@@ -97,6 +97,10 @@ struct PaNIN_detectorApp: App {
                     NotificationCenter.default.post(name: .predictAnnotationRequested, object: nil)
                 }
                 .keyboardShortcut("r", modifiers: [.command, .option])
+                Button("Save Predictions as Annotations…") {
+                    NotificationCenter.default.post(name: .savePredictionsAsAnnotationsRequested, object: nil)
+                }
+                .keyboardShortcut("s", modifiers: [.command, .option])
                 Button("Clear Predictions") {
                     NotificationCenter.default.post(name: .clearPredictionsRequested, object: nil)
                 }

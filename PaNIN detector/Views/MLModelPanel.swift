@@ -95,6 +95,13 @@ struct MLModelPanel: View {
                     .labelsHidden()
                     .help("Show / hide heatmap on canvas")
                     Button {
+                        NotificationCenter.default.post(name: .savePredictionsAsAnnotationsRequested, object: nil)
+                    } label: {
+                        Image(systemName: "square.and.arrow.down")
+                    }
+                    .buttonStyle(.plain)
+                    .help("Save displayed predictions as annotations")
+                    Button {
                         predictionStore.reset()
                     } label: {
                         Image(systemName: "trash")
