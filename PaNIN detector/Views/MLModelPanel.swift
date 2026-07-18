@@ -132,7 +132,10 @@ struct MLModelPanel: View {
                             set: { predictionStore.minProbability = Float($0) }
                         ),
                         in: 0.0...0.99,
-                        step: 0.01
+                        step: 0.01,
+                        onEditingChanged: { editing in
+                            if !editing { predictionStore.commitEdits() }
+                        }
                     )
                     .controlSize(.mini)
                     Text("\(Int((Double(predictionStore.minProbability) * 100).rounded()))%")
@@ -248,11 +251,11 @@ struct MLModelPanel: View {
             },
             set: { newColor in
                 let ns = NSColor(newColor).usingColorSpace(.sRGB) ?? .red
-                predictionStore.classColors[label] = AnnotationColor(
+                predictionStore.setClassColor(label, AnnotationColor(
                     r: Int(round(ns.redComponent * 255)),
                     g: Int(round(ns.greenComponent * 255)),
                     b: Int(round(ns.blueComponent * 255))
-                )
+                ))
             }
         )
     }

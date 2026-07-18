@@ -27,6 +27,7 @@ struct SlideCanvasView: NSViewRepresentable {
         // or stroke style forces an overlay redraw.
         _ = store.annotations.count
         _ = store.selectedID
+        _ = predictionStore.displayedID
         _ = predictionStore.predictions.count
         _ = predictionStore.isVisible
         _ = predictionStore.hiddenClasses

@@ -29,6 +29,7 @@ extension Notification.Name {
     static let exportGeoJSONRequested          = Notification.Name("PaNINDetector.exportGeoJSON")
     static let showHelpRequested               = Notification.Name("PaNINDetector.showHelp")
     static let savePredictionsAsAnnotationsRequested = Notification.Name("PaNINDetector.savePredictionsAsAnnotations")
+    static let togglePredictionHeatmapRequested = Notification.Name("PaNINDetector.togglePredictionHeatmap")
 }
 
 private struct PendingPolygon: Identifiable {
@@ -133,7 +134,9 @@ struct ContentView: View {
     @Environment(\.openWindow) private var openWindow
     @Environment(\.modelContext) private var modelContext
 
-    var body: some View {
+    /// The split-view shell (sidebar + slide canvas). Kept as its own property
+    /// so the large `body` modifier chain type-checks in reasonable time.
+    private var splitView: some View {
         NavigationSplitView {
             AnnotationSidebar(
                 store: store,
@@ -158,6 +161,15 @@ struct ContentView: View {
                 }
         }
         .navigationTitle(slideURL?.lastPathComponent ?? "PaNIN detector")
+        .onChange(of: store.selectedID) { _, newID in
+            // Show the selected annotation's saved prediction module (or the
+            // empty state if it was never classified).
+            predictionStore.displayedID = newID
+        }
+    }
+
+    var body: some View {
+        splitView
         .sheet(item: $pending) { box in
             LabelPickerSheet(
                 initialLabel: store.currentLabel,
@@ -356,6 +368,11 @@ struct ContentView: View {
                 requestSavePredictionsAsAnnotations()
             }
         }
+        .task {
+            for await _ in NotificationCenter.default.notifications(named: .togglePredictionHeatmapRequested) {
+                predictionStore.isVisible.toggle()
+            }
+        }
         .sheet(item: $pendingPredict) { req in
             if let slide, let classifier = classifierStore.classifier {
                 PredictAnnotationSheet(
@@ -418,7 +435,7 @@ struct ContentView: View {
             }
             Button("Cancel", role: .cancel) { pendingPredictionAnnotations = nil }
         } message: { anns in
-            Text("Each displayed prediction becomes a square annotation labeled with its predicted class, saved to this slide's annotation file. This adds \(anns.count) object\(anns.count == 1 ? "" : "s").")
+            Text("Each displayed prediction becomes a square annotation, all assigned the scanned annotation's class, saved to this slide's annotation file. This adds \(anns.count) object\(anns.count == 1 ? "" : "s").")
         }
         .alert("Bank import",
                isPresented: bankImportPromptBinding,
@@ -611,7 +628,7 @@ struct ContentView: View {
                     pending = PendingPolygon(points: pts)
                 }
                 .id(slide.url)
-                FloatingToolBar(tool: $tool)
+                FloatingToolBar(tool: $tool, predictionStore: predictionStore)
                     .padding(.top, 8)
             }
         } else {
@@ -645,8 +662,9 @@ struct ContentView: View {
             slideURL = url
             store.bind(toSlideURL: url)
             tool = .pan
-            // Predictions are slide-specific; wipe on slide change.
-            predictionStore.reset()
+            // Predictions are slide-specific; load this slide's saved results
+            // (keyed per annotation) from the companion file next to the slide.
+            predictionStore.bind(toSlideURL: url)
             UserDefaults.standard.set(url.path, forKey: Self.lastSlideURLKey)
         } catch {
             errorMessage = String(describing: error)
@@ -660,7 +678,7 @@ struct ContentView: View {
     private func closeSlide() {
         guard slide != nil else { return }
         store.unbind()
-        predictionStore.reset()
+        predictionStore.unbind()
         tool = .pan
         slide = nil
         slideURL = nil
@@ -857,6 +875,17 @@ struct ContentView: View {
             errorMessage = "Run a classification on an annotation first."
             return
         }
+        // Every saved square is assigned the class of the scanned annotation,
+        // not its own predicted label — the user wants them grouped under one
+        // common class. Fall back to the recorded source class, then a generic
+        // "Prediction" label if the source annotation is gone.
+        let source = store.annotations.first(where: { $0.id == predictionStore.displayedID })
+        let commonLabel = source?.classification
+            ?? predictionStore.sourceAnnotationClass
+            ?? "Prediction"
+        let commonColor = source?.color
+            ?? predictionStore.classColors[commonLabel]
+            ?? .defaultColor
         let slideH = slide.dimensions.height
         let minProb = predictionStore.minProbability
         let newAnns: [Annotation] = preds.compactMap { pred in
@@ -873,10 +902,9 @@ struct ContentView: View {
                 CGPoint(x: x + size, y: y + size),
                 CGPoint(x: x, y: y + size)
             ]
-            let color = predictionStore.classColors[pred.predictedLabel] ?? .defaultColor
             return Annotation(points: pts,
-                              classification: pred.predictedLabel,
-                              color: color)
+                              classification: commonLabel,
+                              color: commonColor)
         }
         guard !newAnns.isEmpty else {
             errorMessage = "No visible predictions to save. Check the confidence slider and the per-class toggles."
@@ -1002,14 +1030,9 @@ struct ContentView: View {
             colors[label] = deterministicColor(for: label)
         }
 
-        store.reset()
-        store.isPredicting = true
-        store.progressCurrent = 0
-        store.progressTotal = 0
-        store.sourceAnnotationID = annotation.id
-        store.sourceAnnotationClass = annotation.classification
-        store.classColors = colors
-        store.minProbability = minConfidence
+        let annotationID = annotation.id
+        let sourceClass = annotation.classification
+        store.beginRun(annotationID: annotationID)
 
         let progress: @Sendable (Int, Int) -> Void = { current, total in
             Task { @MainActor in
@@ -1028,15 +1051,22 @@ struct ContentView: View {
                     progress: progress
                 )
                 await MainActor.run {
-                    store.predictions = report.predictions
-                    store.perClassCount = report.perClass
-                    store.passes = report.passes
-                    store.isPredicting = false
+                    let result = PredictionResult(
+                        predictions: report.predictions,
+                        passes: report.passes,
+                        perClassCount: report.perClass,
+                        classColors: colors,
+                        sourceAnnotationClass: sourceClass,
+                        minProbability: minConfidence,
+                        hiddenClasses: [],
+                        createdAt: Date()
+                    )
+                    store.finishRun(result, for: annotationID)
                     print("[predict] total=\(report.total) skipped=\(report.skipped) perClass=\(report.perClass) passes=\(report.passes.count)")
                 }
             } catch {
                 await MainActor.run {
-                    store.isPredicting = false
+                    store.failRun()
                     self.errorMessage = "Prediction failed: \(error)"
                 }
             }
@@ -1426,6 +1456,7 @@ private struct TSNEProgressView: View {
 
 private struct FloatingToolBar: View {
     @Binding var tool: AnnotationTool
+    let predictionStore: PredictionStore
     var body: some View {
         HStack(spacing: 4) {
             ForEach(AnnotationTool.allCases) { t in
@@ -1456,6 +1487,21 @@ private struct FloatingToolBar: View {
             ZoomButton(systemImage: "plus.magnifyingglass",
                        help: "Zoom in (⌘=)",
                        notification: .zoomInRequested)
+
+            // Prediction heatmap on/off — only shown once a run has produced
+            // predictions to toggle.
+            if !predictionStore.predictions.isEmpty {
+                Divider().frame(height: 18).padding(.horizontal, 4)
+                Button {
+                    predictionStore.isVisible.toggle()
+                } label: {
+                    Image(systemName: predictionStore.isVisible ? "square.grid.3x3.fill" : "square.grid.3x3")
+                        .frame(width: 28, height: 24)
+                        .foregroundStyle(predictionStore.isVisible ? Color.accentColor : Color.primary)
+                }
+                .buttonStyle(.plain)
+                .help(predictionStore.isVisible ? "Hide prediction grid" : "Show prediction grid")
+            }
         }
         .padding(4)
         .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 10))

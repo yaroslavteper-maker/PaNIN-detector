@@ -7,7 +7,7 @@ import Foundation
 ///
 /// `passPatchSize` and `passStride` record which multi-pass configuration
 /// produced this prediction, so the Model panel can show a per-pass breakdown.
-struct PatchPrediction: Identifiable, Sendable {
+struct PatchPrediction: Identifiable, Sendable, Codable {
     let id: UUID
     let dataX: Int64
     let dataY: Int64

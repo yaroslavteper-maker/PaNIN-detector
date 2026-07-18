@@ -101,6 +101,10 @@ struct PaNIN_detectorApp: App {
                     NotificationCenter.default.post(name: .savePredictionsAsAnnotationsRequested, object: nil)
                 }
                 .keyboardShortcut("s", modifiers: [.command, .option])
+                Button("Show / Hide Prediction Grid") {
+                    NotificationCenter.default.post(name: .togglePredictionHeatmapRequested, object: nil)
+                }
+                .keyboardShortcut("g", modifiers: [.command, .option])
                 Button("Clear Predictions") {
                     NotificationCenter.default.post(name: .clearPredictionsRequested, object: nil)
                 }
