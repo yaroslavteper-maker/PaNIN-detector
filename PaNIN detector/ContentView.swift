@@ -160,7 +160,7 @@ struct ContentView: View {
                     }
                 }
         }
-        .navigationTitle(slideURL?.lastPathComponent ?? "PaNIN detector")
+        .navigationTitle(slideURL?.lastPathComponent ?? "PathLearn")
         .onChange(of: store.selectedID) { _, newID in
             // Show the selected annotation's saved prediction module (or the
             // empty state if it was never classified).

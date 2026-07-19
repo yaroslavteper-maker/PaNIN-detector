@@ -111,7 +111,7 @@ struct PaNIN_detectorApp: App {
             }
 
             CommandGroup(replacing: .help) {
-                Button("PaNIN Detector Help") {
+                Button("PathLearn Help") {
                     NotificationCenter.default.post(name: .showHelpRequested, object: nil)
                 }
                 .keyboardShortcut("?", modifiers: [.command])
@@ -149,7 +149,7 @@ struct PaNIN_detectorApp: App {
         }
         .defaultSize(width: 900, height: 720)
 
-        Window("PaNIN Detector Help", id: "help") {
+        Window("PathLearn Help", id: "help") {
             HelpView()
         }
         .defaultSize(width: 640, height: 640)

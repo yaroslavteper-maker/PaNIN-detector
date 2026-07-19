@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// User-facing instructions shown from Help ▸ PaNIN Detector Help.
+/// User-facing instructions shown from Help ▸ PathLearn Help.
 /// Opened as a standalone window (id "help") from the app's menu command.
 struct HelpView: View {
     var body: some View {
@@ -68,7 +68,7 @@ struct HelpView: View {
 
     private var header: some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text("PaNIN Detector Help")
+            Text("PathLearn Help")
                 .font(.largeTitle.bold())
             Text("A macOS tool for viewing whole-slide pathology images, annotating regions, and training machine-learning classifiers to detect PaNIN lesions.")
                 .font(.body)
