@@ -13,3 +13,13 @@ xcuserdata/
 .build/
 .swiftpm/
 Package.resolved
+
+# Python tooling
+__pycache__/
+.venv/
+
+# Model binaries & data (published as GitHub Release assets, not in-repo)
+*.mlpackage/
+VISTA/MicePan-Segmentation/
+VISTA/norm/
+VISTA/out*/
